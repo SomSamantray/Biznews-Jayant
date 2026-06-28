@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import email.utils
 import hashlib
 import html
 import json
@@ -8,6 +9,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -38,6 +40,8 @@ class Article:
     published_at: str | None = None
     text: str = ""
     score: float = 0.0
+    relevance_score: float = 0.0
+    recency_weight: float = 1.0
     matched_terms: list[str] = field(default_factory=list)
 
 
@@ -161,12 +165,19 @@ def write_cache(cache_dir: Path, key: str, body: str) -> None:
     (cache_dir / f"{key}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
-def fetch_cached(url: str, cache_dir: Path, timeout: float, max_age_seconds: int) -> str:
+def fetch_cached(url: str, cache_dir: Path, timeout: float, max_age_seconds: int, *, retries: int = 2) -> str:
     key = cache_key(url)
     cached = read_cache(cache_dir, key, max_age_seconds)
     if cached is not None:
         return cached
-    body = fetch_url(url, timeout=timeout)
+    for attempt in range(retries + 1):
+        try:
+            body = fetch_url(url, timeout=timeout)
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 or attempt >= retries:
+                raise
+            time.sleep(1.5 * (attempt + 1))
     write_cache(cache_dir, key, body)
     return body
 
@@ -194,6 +205,113 @@ def parse_feed(feed_xml: str, source: str, source_url: str, limit: int) -> list[
     return articles
 
 
+def parse_archive_items(items: list[dict[str, Any]], source: str, source_url: str) -> list[Article]:
+    articles: list[Article] = []
+    for item in items:
+        title = str(item.get("title") or "").strip()
+        url = str(item.get("canonical_url") or "").strip()
+        slug = str(item.get("slug") or "").strip()
+        if not url and slug:
+            url = source_url.rstrip("/") + "/p/" + slug
+        if not title or not url:
+            continue
+        subtitle = str(item.get("subtitle") or item.get("description") or "").strip()
+        articles.append(
+            Article(
+                source=source,
+                source_url=source_url,
+                title=html.unescape(title),
+                url=url,
+                published_at=str(item.get("post_date") or "").strip() or None,
+                text=html_to_text(subtitle),
+            )
+        )
+    return articles
+
+
+def fetch_archive_articles(
+    source: str,
+    source_url: str,
+    *,
+    cache_dir: Path,
+    timeout: float,
+    cache_ttl: int,
+    archive_limit: int,
+    search: str | None = None,
+    page_size: int = 12,
+) -> list[Article]:
+    articles: list[Article] = []
+    seen: set[str] = set()
+    offset = 0
+    while len(articles) < archive_limit:
+        params: dict[str, str | int] = {"sort": "new", "offset": offset, "limit": page_size}
+        if search:
+            params["search"] = search
+        query = urllib.parse.urlencode(params)
+        url = source_url.rstrip("/") + "/api/v1/archive?" + query
+        try:
+            body = fetch_cached(url, cache_dir / "archives", timeout, cache_ttl, retries=4)
+        except Exception:
+            if articles:
+                break
+            raise
+        payload = json.loads(body)
+        if not isinstance(payload, list) or not payload:
+            break
+        for article in parse_archive_items(payload, source, source_url):
+            if article.url in seen:
+                continue
+            seen.add(article.url)
+            articles.append(article)
+            if len(articles) >= archive_limit:
+                break
+        if len(payload) < page_size:
+            break
+        offset += len(payload)
+        time.sleep(0.15)
+    return articles
+
+
+def discover_articles(
+    source: str,
+    source_url: str,
+    *,
+    cache_dir: Path,
+    timeout: float,
+    cache_ttl: int,
+    archive_limit: int,
+    topic: str | None = None,
+) -> list[Article]:
+    try:
+        if topic:
+            search_articles = fetch_archive_articles(
+                source,
+                source_url,
+                cache_dir=cache_dir,
+                timeout=timeout,
+                cache_ttl=cache_ttl,
+                archive_limit=archive_limit,
+                search=topic,
+            )
+            if search_articles:
+                return search_articles
+        archive_articles = fetch_archive_articles(
+            source,
+            source_url,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            cache_ttl=cache_ttl,
+            archive_limit=archive_limit,
+        )
+        if archive_articles:
+            return archive_articles
+    except Exception:
+        pass
+    feed_url = source_url.rstrip("/") + "/feed"
+    feed_xml = fetch_cached(feed_url, cache_dir / "feeds", timeout, cache_ttl)
+    return parse_feed(feed_xml, source, source_url, limit=archive_limit)
+
+
 def _first_text(item: ET.Element, names: list[str]) -> str:
     for name in names:
         value = item.findtext(name)
@@ -218,7 +336,42 @@ def topic_terms(topic: str) -> list[str]:
     return terms
 
 
-def score_article(topic: str, article: Article) -> Article:
+def parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(value)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        try:
+            parsed = email.utils.parsedate_to_datetime(value)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            return None
+
+
+def recency_weight(published_at: str | None, as_of: datetime | None = None) -> float:
+    published = parse_datetime(published_at)
+    if not published:
+        return 0.85
+    as_of = as_of or datetime.now(timezone.utc)
+    days = max(0, (as_of - published).days)
+    if days <= 30:
+        return 1.60
+    if days <= 90:
+        return 1.35
+    if days <= 180:
+        return 1.15
+    if days <= 365:
+        return 1.00
+    if days <= 730:
+        return 0.80
+    return 0.65
+
+
+def score_article(topic: str, article: Article, *, as_of: datetime | None = None) -> Article:
     terms = topic_terms(topic)
     title = article.title.lower()
     body = article.text.lower()
@@ -235,6 +388,8 @@ def score_article(topic: str, article: Article) -> Article:
         score += 8.0
     if phrase and phrase in body:
         score += 4.0
+    weight = recency_weight(article.published_at, as_of=as_of)
+    final_score = score * weight
     return Article(
         source=article.source,
         source_url=article.source_url,
@@ -242,7 +397,9 @@ def score_article(topic: str, article: Article) -> Article:
         url=article.url,
         published_at=article.published_at,
         text=article.text,
-        score=score,
+        score=final_score,
+        relevance_score=score,
+        recency_weight=weight,
         matched_terms=matched,
     )
 
@@ -282,31 +439,50 @@ def collect_source(
     cache_ttl: int,
     min_score: float,
     excerpt_chars: int,
+    archive_limit: int,
+    full_text_limit: int,
+    fetch_workers: int,
+    as_of: datetime | None,
 ) -> SourceResult:
     try:
-        feed_url = source_url.rstrip("/") + "/feed"
-        feed_xml = fetch_cached(feed_url, cache_dir / "feeds", timeout, cache_ttl)
-        candidates = parse_feed(feed_xml, source, source_url, limit=max_posts)
+        candidates = discover_articles(
+            source,
+            source_url,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            cache_ttl=cache_ttl,
+            archive_limit=archive_limit,
+            topic=topic,
+        )
         checked = len(candidates)
         scored: list[Article] = []
-        for article in candidates:
-            enriched = article
-            if len(enriched.text) < 400:
-                try:
-                    raw_page = fetch_cached(article.url, cache_dir / "articles", timeout, cache_ttl)
-                    enriched = Article(
-                        source=article.source,
-                        source_url=article.source_url,
-                        title=article.title,
-                        url=article.url,
-                        published_at=article.published_at,
-                        text=html_to_text(raw_page),
-                    )
-                except Exception:
-                    enriched = article
-            scored_article = score_article(topic, enriched)
-            if scored_article.score >= min_score:
-                scored.append(scored_article)
+        def enrich(article: Article) -> Article:
+            try:
+                raw_page = fetch_cached(article.url, cache_dir / "articles", timeout, cache_ttl)
+                return Article(
+                    source=article.source,
+                    source_url=article.source_url,
+                    title=article.title,
+                    url=article.url,
+                    published_at=article.published_at,
+                    text=html_to_text(raw_page) or article.text,
+                )
+            except Exception:
+                return article
+
+        metadata_ranked = sorted(
+            (score_article(topic, article, as_of=as_of) for article in candidates),
+            key=lambda item: item.score,
+            reverse=True,
+        )
+        fetch_candidates = metadata_ranked[:max(max_posts, full_text_limit)]
+
+        with ThreadPoolExecutor(max_workers=max(1, fetch_workers)) as pool:
+            futures = [pool.submit(enrich, article) for article in fetch_candidates]
+            for future in as_completed(futures):
+                scored_article = score_article(topic, future.result(), as_of=as_of)
+                if scored_article.relevance_score >= min_score:
+                    scored.append(scored_article)
         ranked = sorted(scored, key=lambda item: item.score, reverse=True)
         clipped = [
             Article(
@@ -317,9 +493,11 @@ def collect_source(
                 published_at=item.published_at,
                 text=compact_excerpt(item.text, item.matched_terms, excerpt_chars),
                 score=item.score,
+                relevance_score=item.relevance_score,
+                recency_weight=item.recency_weight,
                 matched_terms=item.matched_terms,
             )
-            for item in ranked
+            for item in ranked[:max_posts]
         ]
         return SourceResult(source=source, source_url=source_url, articles=clipped, checked=checked)
     except Exception as exc:
@@ -335,9 +513,14 @@ def run_report(
     cache_ttl: int = 60 * 60 * 24,
     min_score: float = 2.0,
     excerpt_chars: int = 900,
+    archive_limit: int = 500,
+    full_text_limit: int = 60,
+    fetch_workers: int = 8,
+    as_of: datetime | None = None,
 ) -> Report:
     notes = [
-        "Python retrieved feeds, cleaned HTML, scored topic relevance, and emitted compact excerpts before model synthesis.",
+        "Python searched each full public Substack archive via paginated archive API search, fetched the strongest matching article pages, cleaned HTML, scored topic relevance, applied recency weighting, and emitted compact excerpts before model synthesis.",
+        "Recency weighting: newest 30 days get the highest boost; older posts remain searchable with progressively lower weight.",
         "Six-role synthesis plan: 3 source collectors, 2 cross-checkers, 1 final editor.",
     ]
     results: list[SourceResult] = []
@@ -354,6 +537,10 @@ def run_report(
                 cache_ttl=cache_ttl,
                 min_score=min_score,
                 excerpt_chars=excerpt_chars,
+                archive_limit=archive_limit,
+                full_text_limit=full_text_limit,
+                fetch_workers=fetch_workers,
+                as_of=as_of,
             ): source
             for source, source_url in SOURCES.items()
         }
@@ -435,11 +622,11 @@ def render_compact(report: Report) -> str:
     ]
     if total_matches == 0:
         lines.extend([
-            "**The three-source archive scan came up thin.** The Python engine checked the latest RSS entries from Bharatnama, BizNews by Jay, and Decoding the Dragon, cleaned the HTML, and did not find enough topic-matched evidence to support a strong synthesis.",
+            "**The three-source archive scan came up thin.** The Python engine checked the public archive entries from Bharatnama, BizNews by Jay, and Decoding the Dragon, cleaned article HTML, and did not find enough topic-matched evidence to support a strong synthesis.",
             "",
             "KEY PATTERNS from the research:",
             "1. No source crossed the relevance threshold for this topic.",
-            f"2. Coverage confidence is {confidence} across {total_checked} checked posts.",
+            f"2. Coverage confidence is {confidence} across {total_checked} archive candidates.",
             "",
         ])
     else:
@@ -458,7 +645,10 @@ def render_compact(report: Report) -> str:
         lines.append("KEY PATTERNS from the research:")
         for index, article in enumerate(top[:5], start=1):
             terms = ", ".join(article.matched_terms) if article.matched_terms else "topic match"
-            lines.append(f"{index}. **{source_label(article.source)}:** [{article.title}]({article.url}) - matched {terms}; score {article.score:.1f}.")
+            lines.append(
+                f"{index}. **{source_label(article.source)}:** [{article.title}]({article.url}) - "
+                f"matched {terms}; relevance {article.relevance_score:.1f}; recency weight {article.recency_weight:.2f}; final score {article.score:.1f}."
+            )
         lines.append("")
 
     lines.extend([
@@ -467,13 +657,13 @@ def render_compact(report: Report) -> str:
         "All source collectors reported back.",
     ])
     for source in report.sources:
-        status = f"{len(source.articles)} match{'es' if len(source.articles) != 1 else ''} from {source.checked} checked"
+        status = f"{len(source.articles)} match{'es' if len(source.articles) != 1 else ''} from {source.checked} archive candidates"
         if source.error:
             status += f"; error: {source.error}"
         lines.append(f"- {source_label(source.source)}: {status}")
     lines.extend([
         f"- Coverage confidence: {confidence}",
-        f"- Retrieval path: Python RSS fetch -> HTML cleanup -> topic scoring -> compact excerpts",
+        f"- Retrieval path: Python archive API search -> article fetch -> HTML cleanup -> topic scoring -> recency weighting -> compact excerpts",
         "---",
         "<!-- END PASS-THROUGH FOOTER -->",
         "",
@@ -492,12 +682,14 @@ def report_to_dict(report: Report) -> dict[str, Any]:
 def diagnose(timeout: float = 10.0) -> dict[str, Any]:
     checks: dict[str, Any] = {"python": True, "sources": {}}
     for source, source_url in SOURCES.items():
-        feed_url = source_url.rstrip("/") + "/feed"
+        archive_url = source_url.rstrip("/") + "/api/v1/archive?sort=new&offset=0&limit=12"
         try:
-            body = fetch_url(feed_url, timeout=timeout)
-            checks["sources"][source] = {"feed": feed_url, "ok": "<rss" in body[:500].lower() or "<feed" in body[:500].lower()}
+            payload = json.loads(fetch_url(archive_url, timeout=timeout))
+            checks["sources"][source] = {"archive": archive_url, "ok": isinstance(payload, list), "sample_count": len(payload) if isinstance(payload, list) else 0}
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            checks["sources"][source] = {"feed": feed_url, "ok": False, "error": str(exc)}
+            checks["sources"][source] = {"archive": archive_url, "ok": False, "error": str(exc)}
+        except json.JSONDecodeError as exc:
+            checks["sources"][source] = {"archive": archive_url, "ok": False, "error": str(exc)}
     return checks
 
 
@@ -511,6 +703,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-ttl", type=int, default=int(os.environ.get("BIZNEWS_JAYANT_CACHE_TTL", str(60 * 60 * 24))))
     parser.add_argument("--min-score", type=float, default=float(os.environ.get("BIZNEWS_JAYANT_MIN_SCORE", "2")))
     parser.add_argument("--excerpt-chars", type=int, default=int(os.environ.get("BIZNEWS_JAYANT_EXCERPT_CHARS", "900")))
+    parser.add_argument("--archive-limit", type=int, default=int(os.environ.get("BIZNEWS_JAYANT_ARCHIVE_LIMIT", "500")))
+    parser.add_argument("--full-text-limit", type=int, default=int(os.environ.get("BIZNEWS_JAYANT_FULL_TEXT_LIMIT", "60")))
+    parser.add_argument("--fetch-workers", type=int, default=int(os.environ.get("BIZNEWS_JAYANT_FETCH_WORKERS", "8")))
     parser.add_argument("--diagnose", action="store_true", help="Check Python and Substack feed reachability")
     return parser
 
@@ -532,6 +727,9 @@ def main(argv: list[str] | None = None) -> int:
         cache_ttl=args.cache_ttl,
         min_score=args.min_score,
         excerpt_chars=args.excerpt_chars,
+        archive_limit=args.archive_limit,
+        full_text_limit=args.full_text_limit,
+        fetch_workers=args.fetch_workers,
     )
     if args.emit == "json":
         print(json.dumps(report_to_dict(report), indent=2, sort_keys=True))

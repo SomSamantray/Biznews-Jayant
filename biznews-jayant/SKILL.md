@@ -1,6 +1,6 @@
 ---
 name: biznews-jayant
-description: Use this skill to research any topic across the Bharatnama, BizNews by Jay, and Decoding the Dragon Substack archives. It runs Python retrieval, HTML cleanup, caching, and topic filtering first so the agent synthesizes from compact evidence instead of raw web pages.
+description: Use this skill to research any topic across the full public Bharatnama, BizNews by Jay, and Decoding the Dragon Substack archives. It runs Python archive API retrieval, article cleanup, caching, topic filtering, and recency weighting first so the agent synthesizes from compact evidence instead of raw web pages.
 ---
 
 # biznews-jayant
@@ -22,7 +22,7 @@ python3 "$SKILL_DIR/scripts/biznews_jayant.py" "$TOPIC" --emit compact
 
 If `$SKILL_DIR` is not set by the host, use the directory that contains this `SKILL.md`.
 
-3. Read the engine output. It contains cleaned article text, filtered excerpts, and a consistent synthesis scaffold.
+3. Read the engine output. It contains full-archive matches, cleaned article text, filtered excerpts, recency weighting, and a consistent synthesis scaffold.
 4. Use six analysis roles overall:
    - Source collector: Bharatnama
    - Source collector: BizNews by Jay
@@ -52,7 +52,7 @@ All source collectors reported back.
 - BizNews by Jay: ...
 - Decoding the Dragon: ...
 - Coverage confidence: strong|mixed|thin|absent
-- Retrieval path: Python RSS fetch -> HTML cleanup -> topic scoring -> compact excerpts
+- Retrieval path: Python archive API pagination -> article fetch -> HTML cleanup -> topic scoring -> recency weighting -> compact excerpts
 ---
 <!-- END PASS-THROUGH FOOTER -->
 
@@ -64,6 +64,8 @@ Useful source links:
 
 - Do not fetch or paste raw Substack HTML into the final answer.
 - Prefer the engine's compact output over manual web reading.
+- Search scope is the full public archive for each source through Substack archive API search. The engine then fetches only the strongest matching article pages for full-text cleanup and final ranking. Archive browsing and RSS are fallbacks if searched archive retrieval fails.
+- Recency is a ranking input, not a hard filter: articles from the latest 30 days get the strongest boost, then older articles receive progressively lower weights while remaining searchable.
 - Preserve the badge, `What I found:`, bold lead-in paragraphs, `KEY PATTERNS from the research:`, source-coverage footer, and useful links list.
 - If the engine returns no matches, say that the three-source archive did not show enough evidence and list what was checked.
 - If one source fails, continue with the other sources and mention the failure briefly under confidence.

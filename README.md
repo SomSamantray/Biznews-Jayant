@@ -6,7 +6,7 @@
 - BizNews by Jay: `https://biznewsbyjay.substack.com`
 - Decoding the Dragon: `https://decodingthedragon.substack.com`
 
-The skill runs Python retrieval first, cleaning Substack HTML, filtering by topic relevance, and emitting compact evidence so the agent does not waste context on raw page markup.
+The skill runs Python retrieval first, searching each full public Substack archive through Substack's archive API, then fetching only the strongest matching article pages for full-text cleanup and final ranking. This keeps the archive search broad while keeping runtime and context usage low.
 
 ## Install
 
@@ -28,7 +28,7 @@ This installs the skill globally for Codex-compatible Agent Skills hosts.
 python3 biznews-jayant/scripts/biznews_jayant.py "India AI policy" --emit compact
 ```
 
-The output follows an original report shape: badge, `What I found:`, bold lead-ins, key patterns, source coverage, and useful source links.
+The output follows an original report shape: badge, `What I found:`, bold lead-ins, key patterns, source coverage, and useful source links. Recent posts get more ranking weight, especially within the latest 30 days, but older archive posts remain searchable.
 
 ## Contents
 

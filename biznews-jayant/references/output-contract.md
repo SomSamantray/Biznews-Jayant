@@ -21,11 +21,11 @@ KEY PATTERNS from the research:
 <!-- PASS-THROUGH FOOTER: keep this source-coverage block visible in the final response. -->
 ---
 All source collectors reported back.
-- Bharatnama: {n} matches from {n} checked
-- BizNews by Jay: {n} matches from {n} checked
-- Decoding the Dragon: {n} matches from {n} checked
+- Bharatnama: {n} matches from {n} archive candidates
+- BizNews by Jay: {n} matches from {n} archive candidates
+- Decoding the Dragon: {n} matches from {n} archive candidates
 - Coverage confidence: strong|mixed|thin|absent
-- Retrieval path: Python RSS fetch -> HTML cleanup -> topic scoring -> compact excerpts
+- Retrieval path: Python archive API search -> article fetch -> HTML cleanup -> topic scoring -> recency weighting -> compact excerpts
 ---
 <!-- END PASS-THROUGH FOOTER -->
 
@@ -42,3 +42,12 @@ Use the same scaffold, but make the first two synthesis paragraphs:
 
 Keep the key patterns, source-coverage footer, and useful links list.
 
+## Recency Policy
+
+The Python engine searches the full public archive for every source. Recency affects ranking only:
+
+- Latest 30 days: strongest boost
+- 31-90 days: high boost
+- 91-180 days: moderate boost
+- 181-365 days: neutral weight
+- Older posts: lower weight, still searchable
