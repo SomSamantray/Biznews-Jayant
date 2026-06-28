@@ -70,7 +70,7 @@ def test_json_output_is_serializable(monkeypatch, tmp_path: Path, capsys):
     assert payload["topic"] == "India AI policy"
 
 
-def test_compact_output_uses_last30days_like_scaffold(monkeypatch, tmp_path: Path, capsys):
+def test_compact_output_uses_biznews_scaffold(monkeypatch, tmp_path: Path, capsys):
     feed = (ROOT / "tests" / "fixtures" / "feed.xml").read_text(encoding="utf-8")
 
     def fake_fetch_url(url: str, timeout: float = 15.0) -> str:

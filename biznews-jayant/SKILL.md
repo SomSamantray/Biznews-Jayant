@@ -22,7 +22,7 @@ python3 "$SKILL_DIR/scripts/biznews_jayant.py" "$TOPIC" --emit compact
 
 If `$SKILL_DIR` is not set by the host, use the directory that contains this `SKILL.md`.
 
-3. Read the engine output. It contains cleaned article text, filtered excerpts, and a `last30days`-style synthesis scaffold.
+3. Read the engine output. It contains cleaned article text, filtered excerpts, and a consistent synthesis scaffold.
 4. Use six analysis roles overall:
    - Source collector: Bharatnama
    - Source collector: BizNews by Jay

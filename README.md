@@ -28,7 +28,7 @@ This installs the skill globally for Codex-compatible Agent Skills hosts.
 python3 biznews-jayant/scripts/biznews_jayant.py "India AI policy" --emit compact
 ```
 
-The output follows a `last30days`-style report shape: badge, `What I found:`, bold lead-ins, key patterns, source coverage, and useful source links.
+The output follows an original report shape: badge, `What I found:`, bold lead-ins, key patterns, source coverage, and useful source links.
 
 ## Contents
 
