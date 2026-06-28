@@ -20,7 +20,7 @@ Research a user topic across these fixed author sources:
 python3 "$SKILL_DIR/scripts/biznews_jayant.py" "$TOPIC" --emit compact
 ```
 
-If `$SKILL_DIR` is not set by the host, use the directory that contains this `SKILL.md`.
+On Windows, use `python` or `py -3` instead of `python3`. If `$SKILL_DIR` is not set by the host, use the directory that contains this `SKILL.md`.
 
 3. Read the engine output. It contains full-archive matches, cleaned article text, filtered excerpts, recency weighting, and a consistent synthesis scaffold.
 4. Use six analysis roles overall:
@@ -78,6 +78,12 @@ Run a normal compact research bundle:
 
 ```bash
 python3 "$SKILL_DIR/scripts/biznews_jayant.py" "India AI policy" --emit compact
+```
+
+Windows:
+
+```powershell
+python "$env:SKILL_DIR\scripts\biznews_jayant.py" "India AI policy" --emit compact
 ```
 
 Return machine-readable evidence:

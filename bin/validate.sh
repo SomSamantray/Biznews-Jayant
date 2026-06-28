@@ -2,12 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-python3 -m py_compile "$ROOT/biznews-jayant/scripts/biznews_jayant.py" "$ROOT/biznews-jayant/scripts/lib/biznews_core.py"
-python3 "$ROOT/biznews-jayant/scripts/biznews_jayant.py" --diagnose >/tmp/biznews-jayant-diagnose.json || true
-if command -v uv >/dev/null 2>&1; then
-  (cd "$ROOT" && uv run pytest)
-else
-  (cd "$ROOT" && python3 -m pytest)
+PYTHON_BIN="${PYTHON:-}"
+if [ -z "$PYTHON_BIN" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN=python
+  else
+    echo "No Python executable found. Install Python 3.11+." >&2
+    exit 1
+  fi
 fi
-python3 /Users/apple/.codex/skills/.system/skill-creator/scripts/quick_validate.py "$ROOT/biznews-jayant"
-
+"$PYTHON_BIN" "$ROOT/bin/validate.py"
