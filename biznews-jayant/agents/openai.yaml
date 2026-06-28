@@ -1,0 +1,6 @@
+interface:
+  display_name: "BizNews Jayant"
+  short_description: "Research Jayant Substack sources"
+  default_prompt: "Use $biznews-jayant to research India AI policy across the Jayant Substack sources."
+policy:
+  allow_implicit_invocation: true

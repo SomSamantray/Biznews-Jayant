@@ -1,0 +1,17 @@
+[project]
+name = "biznews-jayant-skill"
+version = "0.1.0"
+description = "Agent skill for researching Jayant Substack sources"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest>=8,<10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = ["-q", "--tb=short"]
+

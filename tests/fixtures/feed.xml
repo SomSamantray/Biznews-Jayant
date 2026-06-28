@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Example Substack</title>
+    <item>
+      <title>India AI policy shifts</title>
+      <link>https://example.substack.com/p/india-ai-policy</link>
+      <pubDate>Mon, 01 Jun 2026 10:00:00 GMT</pubDate>
+      <content:encoded><![CDATA[
+        <article><h1>India AI policy shifts</h1><p>India is changing AI policy for startups.</p><script>bad()</script></article>
+      ]]></content:encoded>
+    </item>
+    <item>
+      <title>Unrelated cricket notes</title>
+      <link>https://example.substack.com/p/cricket</link>
+      <pubDate>Tue, 02 Jun 2026 10:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Sports notes only.</p>]]></description>
+    </item>
+  </channel>
+</rss>
+
