@@ -52,7 +52,7 @@ All source collectors reported back.
 - BizNews by Jay: ...
 - Decoding the Dragon: ...
 - Coverage confidence: strong|mixed|thin|absent
-- Retrieval path: Python archive API pagination -> article fetch -> HTML cleanup -> topic scoring -> recency weighting -> compact excerpts
+- Retrieval path: Python archive API search -> article fetch -> HTML cleanup -> topic scoring -> recency weighting -> compact excerpts
 ---
 <!-- END PASS-THROUGH FOOTER -->
 
