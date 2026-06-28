@@ -1,6 +1,6 @@
 # Biznews-Jayant
 
-`biznews-jayant` is an Agent Skill for researching topics across three Jayant-authored Substack sources:
+`biznews-jayant` is an Agent Skill for researching topics across three Jayant-authored Substack sources. It is designed for Agent Skills-compatible hosts including Codex, Claude Code, Cursor-style agents, and other tools supported by `skills add`.
 
 - Bharatnama: `https://bharatnama.substack.com`
 - BizNews by Jay: `https://biznewsbyjay.substack.com`
@@ -22,7 +22,19 @@ Windows PowerShell:
 .\bin\install.ps1
 ```
 
-This installs the skill globally for Codex-compatible Agent Skills hosts.
+This installs the skill globally for Agent Skills-compatible hosts. The same source folder is used by Codex, Claude Code, and other supported agents; unsupported hosts are skipped by the installer.
+
+Direct installer command, if you do not want to use the wrapper:
+
+```bash
+npx -y skills@latest add ./biznews-jayant -g -y
+```
+
+Windows PowerShell equivalent:
+
+```powershell
+npx -y skills@latest add .\biznews-jayant -g -y
+```
 
 ## Validate
 

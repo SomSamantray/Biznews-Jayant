@@ -5,6 +5,8 @@ description: Use this skill to research any topic across the full public Bharatn
 
 # biznews-jayant
 
+This is a standard Agent Skill. It should work in Codex, Claude Code, and other hosts that load Agent Skills from a `SKILL.md` folder. The Python engine uses only the standard library.
+
 Research a user topic across these fixed author sources:
 
 - Bharatnama: `https://bharatnama.substack.com`
@@ -20,7 +22,7 @@ Research a user topic across these fixed author sources:
 python3 "$SKILL_DIR/scripts/biznews_jayant.py" "$TOPIC" --emit compact
 ```
 
-On Windows, use `python` or `py -3` instead of `python3`. If `$SKILL_DIR` is not set by the host, use the directory that contains this `SKILL.md`.
+On Windows, use `python` or `py -3` instead of `python3`. If `$SKILL_DIR` is not set by the host, use the directory that contains this `SKILL.md`. If the host has no shell-variable expansion, resolve the absolute skill directory path first and pass it directly.
 
 3. Read the engine output. It contains full-archive matches, cleaned article text, filtered excerpts, recency weighting, and a consistent synthesis scaffold.
 4. Use six analysis roles overall:
