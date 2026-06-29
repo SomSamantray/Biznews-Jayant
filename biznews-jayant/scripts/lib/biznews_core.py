@@ -622,50 +622,44 @@ def render_compact(report: Report) -> str:
     ]
     if total_matches == 0:
         lines.extend([
-            "**The three-source archive scan came up thin.** The Python engine checked the public archive entries from Bharatnama, BizNews by Jay, and Decoding the Dragon, cleaned article HTML, and did not find enough topic-matched evidence to support a strong synthesis.",
+            "**Nothing strong came back on this topic.** All three sources were checked and not enough relevant content was found to give a solid answer.",
             "",
             "KEY PATTERNS from the research:",
-            "1. No source crossed the relevance threshold for this topic.",
-            f"2. Coverage confidence is {confidence} across {total_checked} archive candidates.",
+            "1. No strong matches found across all three sources for this topic.",
+            f"2. Coverage is {confidence}.",
             "",
         ])
     else:
         leads = diverse_articles(report, limit=3)
         strongest = leads[0]
         lines.extend([
-            f"**{source_label(strongest.source)} is the strongest signal for this topic.** [{strongest.title}]({strongest.url}) is the top-ranked match, with the engine matching {', '.join(strongest.matched_terms) or 'the topic terms'} after stripping Substack markup and boilerplate. {_lead_sentence(strongest)}",
+            f"**{source_label(strongest.source)} has the most on this.** [{strongest.title}]({strongest.url}) covers {', '.join(strongest.matched_terms) or 'the topic'}. {_lead_sentence(strongest)}",
             "",
         ])
         lead_labels = ["adds a contrasting angle", "rounds out the picture"]
         for article, label in zip(leads[1:], lead_labels):
             lines.extend([
-                f"**{source_label(article.source)} {label}.** [{article.title}]({article.url}) scored {article.score:.1f} on the cleaned text. {_lead_sentence(article)}",
+                f"**{source_label(article.source)} {label}.** [{article.title}]({article.url}) {_lead_sentence(article)}",
                 "",
             ])
         lines.append("KEY PATTERNS from the research:")
         for index, article in enumerate(top[:5], start=1):
-            terms = ", ".join(article.matched_terms) if article.matched_terms else "topic match"
+            terms = ", ".join(article.matched_terms) if article.matched_terms else "the topic"
             lines.append(
-                f"{index}. **{source_label(article.source)}:** [{article.title}]({article.url}) - "
-                f"matched {terms}; relevance {article.relevance_score:.1f}; recency weight {article.recency_weight:.2f}; final score {article.score:.1f}."
+                f"{index}. **{source_label(article.source)}:** [{article.title}]({article.url}) — covers: {terms}."
             )
         lines.append("")
 
-    lines.extend([
-        "<!-- PASS-THROUGH FOOTER: keep this source-coverage block visible in the final response. -->",
-        "---",
-        "All source collectors reported back.",
-    ])
+    lines.append("---")
     for source in report.sources:
-        status = f"{len(source.articles)} match{'es' if len(source.articles) != 1 else ''} from {source.checked} archive candidates"
+        count = len(source.articles)
+        status = f"{count} article{'s' if count != 1 else ''} found"
         if source.error:
-            status += f"; error: {source.error}"
+            status += f" (note: {source.error})"
         lines.append(f"- {source_label(source.source)}: {status}")
     lines.extend([
         f"- Coverage confidence: {confidence}",
-        f"- Retrieval path: Python archive API search -> article fetch -> HTML cleanup -> topic scoring -> recency weighting -> compact excerpts",
         "---",
-        "<!-- END PASS-THROUGH FOOTER -->",
         "",
         "Useful source links:",
     ])
